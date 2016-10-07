@@ -1,23 +1,4 @@
 #!C:/Perl/bin/perl 
-
-#    llama_magic_score.pl
-#
-#    Copyright (C) 2014  Sarah Keegan
-#
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU General Public License as published by
-#    the Free Software Foundation, either version 3 of the License, or
-#    (at your option) any later version.
-#
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU General Public License for more details.
-#
-#    You should have received a copy of the GNU General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-
 #web interface for programs to find the best Llama nanobodies based on peptide mapping (from MS data) and CDR regions
 #INPUT: DNA sequence files and MS files, XTandem parameters
 #OUTPUT: HTML page with ranked, grouped nanobodies (also showing peptide mapping and highlighted CDR1/2/3 regions)
@@ -85,6 +66,22 @@ eval #for exception handling
 	    {
 		#get db name from html form
 		my $db_name = param('db_name');
+		my @turned_on = param('db_params');
+		my $USE_PRIMERS = 0; 
+		my $ADD_TAIL_SEQUENCES = 0; 
+		foreach my $param (@turned_on)
+		{
+		    if ($param eq 'use_primers')
+		    {
+			$USE_PRIMERS = 1;
+		    }
+		    if ($param eq 'add_tails')
+		    {
+			$ADD_TAIL_SEQUENCES = 1;
+		    }
+		    
+		}
+		
 		if ($db_name eq "")
 		{
 		    display_error_page("Error: Please provide a name for the new database.");
@@ -98,10 +95,16 @@ eval #for exception handling
 		    $err_str = create_new_db($db_name, $new_dir);
 		    if ($err_str) { die $err_str; }
 		    
+		    #create param file so we know if the db was created with primer identification and with tail sequences
+		    if(!open(OUT, ">$BASE_DIR/$RESULTS_DIR/$new_dir/db_params.txt"))
+		    { die "Error creating db params file: '$BASE_DIR/$RESULTS_DIR/$new_dir/db_params.txt'"; }
+		    print OUT "USE_PRIMERS=$USE_PRIMERS\nADD_TAIL_SEQUENCES=$ADD_TAIL_SEQUENCES\n";
+		    close(OUT);
+		    
 		    #run translation from dna to protein and digest with trypsin -> protein db files
 		    #(run asynchronously so the CGI program can return...)
 		    #`"run_llama_scripts.pl" "db_scripts" "$BASE_DIR/$RESULTS_DIR/$new_dir"`;
-		    my $proc1 = Proc::Background->new('C:/perl/bin/perl.exe', 'run_llama_scripts.pl', 'db_scripts', "$BASE_DIR/$RESULTS_DIR/$new_dir");
+		    my $proc1 = Proc::Background->new('C:/perl/bin/perl.exe', 'run_llama_scripts.pl', 'db_scripts', "$BASE_DIR/$RESULTS_DIR/$new_dir", $USE_PRIMERS, $ADD_TAIL_SEQUENCES);
 		    
 		    #return informative message to user...
 		    display_message_page("Your new database has been uploaded.  You should see it listed on the home page.  \
@@ -115,6 +118,19 @@ eval #for exception handling
 		my $ms_name = param('ms_name');
 		my $parent_err = param('mass_error');
 		my $frag_err = param('frag_mass_error');
+		my $parent_err_units = param('parent_error_units');
+		my $frag_err_units = param('frag_error_units');
+		
+		my @turned_on = param('search_params');
+		my $ADD_CONSTANTS = 0; 
+		foreach my $param (@turned_on)
+		{
+		    if ($param eq 'add_constants')
+		    {
+			$ADD_CONSTANTS = 1;
+		    }
+		}
+		
 		if ($ms_name eq "") { display_error_page("Error: Please provide a name for this DB Search/Candidate List."); }
 		elsif($parent_err eq "" or $parent_err <= 0) { display_error_page("Error: Parent mass error out of range."); }
 		elsif($frag_err eq "" or $frag_err <= 0) { display_error_page("Error: Fragment mass error out of range."); }
@@ -128,9 +144,29 @@ eval #for exception handling
 		    $err_str = create_new_search($db_id, $ms_name, $new_dir);
 		    if ($err_str) { die $err_str; }
 		    
+		    #read db params to see if we should use primers and tail sequences
+		    my $USE_PRIMERS = 0; 
+		    my $ADD_TAIL_SEQUENCES = 0; 
+		    if(open(IN, "<$BASE_DIR/$RESULTS_DIR/$db_id/db_params.txt"))
+		    { 
+			while (<IN>)
+			{
+			    if (/USE_PRIMERS=(\d)/)
+			    {
+				$USE_PRIMERS = $1;
+			    }
+			    if (/ADD_TAIL_SEQUENCES=(\d)/)
+			    {
+				$ADD_TAIL_SEQUENCES = $1;
+			    }
+			}
+			close(IN);
+		    }
+		    
 		    #(following will run asynchronously so the CGI program can return...)
 		    #do tandem search, then, run map_peptides_to_protein and create candidate list html file
-		    my $proc1 = Proc::Background->new('perl.exe', 'run_llama_scripts.pl', 'search_and_map_scripts', "$BASE_DIR/$RESULTS_DIR/$db_id/$new_dir", "$BASE_DIR/$RESULTS_DIR/$db_id", "$parent_err", "$frag_err", "/$RESULTS_DIR/$db_id/$new_dir", $SHOW_SCORE);
+		    my $proc1 = Proc::Background->new('perl.exe', 'run_llama_scripts.pl', 'search_and_map_scripts', "$BASE_DIR/$RESULTS_DIR/$db_id/$new_dir", "$BASE_DIR/$RESULTS_DIR/$db_id",
+						      "$parent_err", "$frag_err", "$parent_err_units", "$frag_err_units", "/$RESULTS_DIR/$db_id/$new_dir", $SHOW_SCORE, $USE_PRIMERS, $ADD_TAIL_SEQUENCES, $ADD_CONSTANTS);
 		    
 		    #return informative message to user...
 		    display_message_page("Your new search has been submitted.  You should see it listed on the home page under the database you selected.  \
@@ -262,12 +298,16 @@ sub display_db_upload_form
     print qq!<hr /><div id="db_form" style="display:none;"><a id="close" href="#" onclick="close_right('db_form')"></a>!,
 	p(b(u('Upload a new Sequence Database:'))),
 	'Name: ',
-	textfield(-name=>'db_name', -value=>'', -size=>20, -maxlength=>20),
+	textfield(-name=>'db_name', -value=>'', -size=>40, -maxlength=>100),
 	br(), br(),
 	'Select files (fasta format):',
 	br(), 
 	'<input name="dna_files" type="file" class="multi"/>',
 	br(),
+	'<input name="db_params" type="checkbox" value="use_primers"> identify primers in MiSeq for quality control',
+	'<br>',
+	'<input name="db_params" type="checkbox" value="add_tails"> add hinge region tails to sequenced VHH candidates',
+	'<br><br>',
 	submit(-name=>'submit', -id=>'db_upload_button', -value=>'Upload'), 
 	"</div>";
 }
@@ -300,7 +340,7 @@ sub display_ms_upload_form
 	qq!<input type="text" name="ms_db_name" id="ms_db_name" value="" disabled)!, 
 	br(), br(),
 	'Name: ',
-	textfield(-name=>'ms_name', -value=>'', -size=>20, -maxlength=>20),
+	textfield(-name=>'ms_name', -value=>'', -size=>40, -maxlength=>100),
 	br(), br(), 
 	'Select MS files (mgf format):',
 	br(), 
@@ -308,9 +348,14 @@ sub display_ms_upload_form
 	br(), 
 	u('X! Tandem parameters:'), br(), 
 	'Parent mass error: +/- ',
-	textfield(-name=>'mass_error', -value=>'10', -size=>4, -maxlength=>4), ' ppm', br(),
+	textfield(-name=>'mass_error', -value=>'10', -size=>4, -maxlength=>4), 
+	'<input type="radio" name="parent_error_units" value="Daltons">Daltons',
+	'<input type="radio" name="parent_error_units" value="ppm" checked>ppm', br(),
 	'Fragment mass error:&nbsp;',
-	textfield(-name=>'frag_mass_error', -value=>'0.4', -size=>4, -maxlength=>4), ' Daltons', br(), br(), 
+	textfield(-name=>'frag_mass_error', -value=>'10', -size=>4, -maxlength=>4),
+	'<input type="radio" name="frag_error_units" value="Daltons" >Daltons',
+	'<input type="radio" name="frag_error_units" value="ppm" checked>ppm', br(), br(),
+	'<input name="search_params" type="checkbox" value="add_constants"> include constant region peptides in XTandem search', br(), br(),
 	hidden(-name=>'ms_db_id', -id=>'ms_db_id', -value=>""),
 	submit(-name=>'submit', -id=>'ms_upload_button', -value=>'Create Candidate List'), 
 	"</div>";
@@ -493,7 +538,7 @@ sub top_header
     print header(),
 	  start_html(-title => 'Llama Magic',
 		     -style => [{ -src=>'../llama-magic-html/smoothness/jquery-ui-1.10.3.custom.min.css' }, #download and fix this
-				{ -src=>'../llama-magic-html/main.css' }], 
+				{ -src=>'../llama-magic-html/main1.css' }], 
 		     -script => [{ -type=>'javascript', -src=>'../llama-magic-html/jquery-1.9.1.min.js' },
 				{ -type=>'javascript', -src=>'../llama-magic-html/jquery-ui-1.10.3.custom.min.js' }, #download and fix this
 				{ -type=>'javascript', -src=>'../llama-magic-html/jquery.MultiFile.pack.js' },
@@ -596,11 +641,20 @@ sub upload_files
 sub create_taxonomy_xml
 {
     my $dir = shift;
-    if(!open(OUT, ">$BASE_DIR/$RESULTS_DIR/$dir/taxonomy.xml")) { return "Error creating taxonomy file: '$BASE_DIR/$RESULTS_DIR/$dir/taxonomy.xml'"; }
-    print OUT qq(<?xml version="1.0"?><bioml label="x! taxon-to-file matching list">\
-		<taxon label="llama"><file format="peptide" URL="../results/$dir/protein/longest_nr_predigested.fasta" />
-		</taxon></bioml>);
-    close(OUT);
+    if(!open(XML_OUT, ">$BASE_DIR/$RESULTS_DIR/$dir/taxonomy.xml")) { return "Error creating taxonomy file: '$BASE_DIR/$RESULTS_DIR/$dir/taxonomy.xml'"; }
+    print XML_OUT <<XMLTEXT;
+    <?xml version="1.0"?><bioml label="x! taxon-to-file matching list">
+	<taxon label="llama">
+	    <file format="peptide" URL="$BASE_DIR/$RESULTS_DIR/$dir/protein/longest_nr_predigested.fasta" />
+	</taxon>
+
+	<taxon label="llama_constant">
+		<file format="peptide" URL="$BASE_DIR/$RESULTS_DIR/$dir/protein/longest_nr_predigested.fasta" />
+		<file format="peptide" URL="$BASE_DIR/constant_regions/all_predigested.fasta" />
+	</taxon>
+    </taxon></bioml>
+XMLTEXT
+    close(XML_OUT);
     return "";
 }
 

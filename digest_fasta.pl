@@ -1,21 +1,4 @@
 #!/usr/local/bin/perl 
-
-#    digest_fasta.pl
-#
-#    Copyright (C) 2014  Sarah Keegan
-#
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU General Public License as published by
-#    the Free Software Foundation, either version 3 of the License, or
-#    (at your option) any later version.
-#
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU General Public License for more details.
-#
-#    You should have received a copy of the GNU General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 #require "./masses_and_fragments.pl";
 
@@ -29,14 +12,22 @@
 
 use warnings;
 use strict;
+use JSON; # imports encode_json, decode_json, to_json and from_json.
 
-my $USE_TAIL = 0;
+my $dir;
+my $incompletes;
+my $use_tail;
 
-my $dir="";
-my $incompletes=0;
+if ($ARGV[0] && $ARGV[0]=~/\w/) { $dir=$ARGV[0];}  #C:\Code\NCDIR\Llama\results\58\protein\temp
+else { $dir = "C:\\Code\\NCDIR\\Llama\\results\\58\\protein\\temp"; } #C:\\Code\\NCDIR\\Llama\\results\\61\\protein"; } 
 
-if ($ARGV[0] && $ARGV[0]=~/\w/) { $dir=$ARGV[0];} else { $dir="C:/temp/temp/temp"; } #{ $dir="C:/NCDIR/Llama/results/36/protein"; } #"C:\\NCDIR\\Llama\\FASTQ\\Merged\\10_07_2013\\4761_merged_iden0.9_notrim"; } 
-if ($ARGV[1] && $ARGV[1]=~/\w/) { $incompletes=$ARGV[1];} else { $incompletes=1; }
+if ($ARGV[1] && $ARGV[1]=~/\w/) { $incompletes=$ARGV[1];}
+else { $incompletes=1; }
+
+if ($ARGV[2] && $ARGV[2]=~/\w/) { $use_tail=$ARGV[2];}
+else { $use_tail=1; }
+
+my %protein_peptides = ();
 
 my $total_pep_count=0;
 my %PEP=();
@@ -47,12 +38,21 @@ my $peptides_count=0;
 my $proteins_count=0;
 my %proteins_count=();
 my $line="";
+my @TAIL_SEQUENCES = ("SEPKIPQPQPKPQ", "SAHHSEDPSSKCP", "SEPKTPKPQPQPQPQ", "SGTNEVCKCPKCPAPEL", "EPKIPQPQPKPQ", "AHHSEDPSSKCP", "EPKTPKPQPQPQPQ", "GTNEVCKCPKCPAPEL");
 
 if (!opendir(DIR,"$dir")) { print "Error reading $dir\n"; exit(1); }
 
 my @allfiles=readdir DIR;
 closedir DIR;
 my $count_fasta = 0;
+
+if (!open (IND_OUT, ">$dir/protein_peptides.fasta"))
+{
+	print "Error creating $dir/protein_peptides.fasta\n";
+	exit(1);
+	
+}
+
 foreach my $filename (@allfiles)
 {
 	if ($filename!~/\.fas?t?a?$/i) { next; } #can be *.fa, *.fas, *.fast, *.fasta, case insensitive
@@ -62,7 +62,6 @@ foreach my $filename (@allfiles)
 	#print qq!$filename\n!;
 	my $name="";
 	my $sequence="";
-	my $protein_count = 0;
 	while ($line=<IN>)
 	{
 		chomp($line);
@@ -83,20 +82,38 @@ foreach my $filename (@allfiles)
 			}
 			if ($name =~ /\w/ and $sequence =~ /\w/)
 			{#both name and sequence were inputted, add the protein to the count
-				$proteins_count++;
-				$proteins_count{$filename}++;
-				#print "$proteins_count. $name\n";
 				
-				#add tail sequence to protein so that we don't miss c terminus peptides:
-				if($USE_TAIL) { $sequence .= "SEPKIPQPQPKPQ"; }
 				
+			
 				#digest the protein with trypsin, the function fills the %PEP hash with the resulting peptides
 				%PEP=();
-				DigestTrypsin($name,$sequence,$incompletes);
 				
-				if($protein_count % 100000 == 0) { print "$protein_count\n"; } #if($protein_count >= 10000) { last; } }
-				$protein_count++;
+				#add tail sequence to protein so that we don't miss c terminus peptides:
+				if($use_tail)
+				{
+					my $new_sequence;
+					foreach my $tail (@TAIL_SEQUENCES)
+					{
+						$new_sequence = $sequence . $tail;
+						DigestTrypsin($name,$new_sequence,$incompletes);
+					}
+				}
+				else
+				{
+					DigestTrypsin($name,$sequence,$incompletes);
+				}
 				
+				if($proteins_count % 50000 == 0) { print "$proteins_count\n"; } #if($protein_count >= 10000) { last; } }
+				#if ($proteins_count > 1000) {
+				#	last;
+				#}
+				
+				
+				#strip primer info from name before outputting!
+				$name =~ s/(_fr[012])_fwd_(\w*)_rev_(\w*)$//;
+				$name = $name . $1;
+				
+				print IND_OUT ">$name\n";
 				foreach my $peptide (keys %PEP)
 				{#we want to keep a count of the number of proteins that contained a particular peptide when digested 
 				 #with trypsin - a list of each 'name' of the proteins is stored in the hash %PEP_proteins and the number 
@@ -113,8 +130,14 @@ foreach my $filename (@allfiles)
 						#	print "$name $peptide\n";
 						#}
 						$PEP_proteins_count{$peptide}++;
+						print IND_OUT "#$peptide#";
 					}
 				}
+				print IND_OUT "#\n";
+				
+				$proteins_count++;
+				$proteins_count{$filename}++;
+				#print "$proteins_count. $name\n";
 				
 			}
 			$name=$name_;
@@ -124,23 +147,34 @@ foreach my $filename (@allfiles)
 		{#it is a line of the sequence
 			$sequence.="$line";
 		}
-		
-		
-	
 	}	
 	
 	#the last protein left in the file, do the same as above
 	if ($name =~ /\w/ and $sequence =~ /\w/)
 	{
-		$proteins_count++;
-		$proteins_count{$filename}++;
-		#print "$proteins_count. $name\n";
+		#digest the protein with trypsin, the function fills the %PEP hash with the resulting peptides
+		%PEP=();
 		
 		#add tail sequence to protein so that we don't miss c terminus peptides:
-		if($USE_TAIL) { $sequence .= "SEPKIPQPQPKPQ"; }
-				
-		%PEP=();
-		DigestTrypsin($name,$sequence,$incompletes);
+		if($use_tail)
+		{
+			my $new_sequence;
+			foreach my $tail (@TAIL_SEQUENCES)
+			{
+				$new_sequence = $sequence . $tail;
+				DigestTrypsin($name,$new_sequence,$incompletes);
+			}
+		}
+		else
+		{
+			DigestTrypsin($name,$sequence,$incompletes);
+		}
+		
+		#strip primer info from name before outputting!
+		$name =~ s/(_fr[012])_fwd_(\w*)_rev_(\w*)$//;
+		$name = $name . $1;
+		
+		print IND_OUT ">$name\n";
 		foreach my $peptide (keys %PEP)
 		{
 			#print qq!$peptide\n!;
@@ -152,15 +186,20 @@ foreach my $filename (@allfiles)
 				#	$PEP_proteins{$peptide} .= qq!#$name#!;
 				#}
 				$PEP_proteins_count{$peptide}++;
+				print IND_OUT "#$peptide#";
 			}
 		}
+		print IND_OUT "#\n";
+		
+		$proteins_count++;
+		$proteins_count{$filename}++;
+		#print "$proteins_count. $name\n";
 	}
 	close(IN);
 	$files_count++;
 	print qq!$files_count. $filename $proteins_count{$filename}\n!;
-	
-	
 }
+close(IND_OUT);
 
 if ($count_fasta == 0)
 {

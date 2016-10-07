@@ -1,4 +1,4 @@
-#!C:/Perl/bin/perl -d
+#!C:/Perl/bin/perl
 ##
 ##
 ## peptide.pl
@@ -109,7 +109,7 @@ my $use_png = 0;
 my $error = 0;
 
 my $path = $cgi->param('path');
-if ($path!~/^\/\//) { $path = get_root() . $cgi->param('path'); }
+if ($path!~/^\/\//) { $path = get_root() . $cgi->param('path'); } #
 my $url = $cgi->param('path');
 my $label = $cgi->param('label');
 my $uid_input = $cgi->param('uid');
@@ -1733,7 +1733,7 @@ sub get_tics
 sub draw_spectrum
 {
 	my($_m,$_i,$_p,$parent) = @_;
-	my $tp = get_root() . $_p;
+	my $tp = get_root() . $_p; # 
 	if($use_png == 1)	{
 		$tp = "temp.svg";
 	}
