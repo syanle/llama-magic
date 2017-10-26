@@ -6,21 +6,19 @@ use strict;
 my $dir="";
 my $out_dir = "";
 my $use_primers=1;
+my $new_primers = 1;
 
-if ($ARGV[0]=~/\w/) { $dir="$ARGV[0]";}
-else { $dir = ""; } 
+if ($ARGV[0]=~/\w/) { $dir="$ARGV[0]"; }
+else { $dir = "/Users/sarahkeegan/fenyolab/data_and_results/Llama_MiSeq/MISEQ_DB_2017_06_12/2015-5094-H/trimmed/merged/fasta/removed_primers/"; } 
 
-if ($ARGV[1]=~/\w/) { $out_dir="$ARGV[1]";}
-else { $out_dir = ""; } 
+if ($ARGV[1]=~/\w/) { $out_dir="$ARGV[1]"; }
+else { $out_dir = "/Users/sarahkeegan/fenyolab/data_and_results/Llama_MiSeq/MISEQ_DB_2017_06_12/2015-5094-H/trimmed/merged/fasta/removed_primers/translated/"; } 
 
-if ($ARGV[2]=~/\w/)
-{
-	$use_primers=$ARGV[2];
-} #should be 1 or 0
-else
-{
-	$use_primers=1;
-}
+if ($ARGV[2]=~/\w/) { $use_primers=$ARGV[2]; } 
+else { $use_primers=1; }
+
+if ($ARGV[3]=~/\w/) { $new_primers=$ARGV[3]; } 
+else { $new_primers=1; }
 
 my %redundancy_listing;
 my %mapping = (	"TTT"=>"F","TTC"=>"F","TTA"=>"L","TTG"=>"L",
@@ -43,7 +41,16 @@ my %mapping = (	"TTT"=>"F","TTC"=>"F","TTA"=>"L","TTG"=>"L",
 		"AGT"=>"S","AGC"=>"S","AGA"=>"R","AGG"=>"R",
 		"GGT"=>"G","GGC"=>"G","GGA"=>"G","GGG"=>"G");
 
-my $LENGTH_P1_PRIMER = 29;
+
+my $LENGTH_P1_PRIMER;
+if ($new_primers)
+{
+    $LENGTH_P1_PRIMER = 23;
+}
+else
+{
+	$LENGTH_P1_PRIMER = 29;
+}
 
 print "Executing dnatoprot_longest_nr.pl\n";
 
@@ -56,10 +63,11 @@ my %orf_trim=();
 
 my @allfiles=readdir DIR;
 closedir DIR;
-my $count_fasta = 0;
 my $BOTH_PRIMERS = 1;
-my $OUTPUT_FILTERED_SEQUENCES = 0; #set this to false when running through llama magic
+my $OUTPUT_FILTERED_SEQUENCES = 1; #set this to false when running through llama magic
 
+my $count_fasta = 0;
+my $entry_count = 0;
 foreach my $filename (@allfiles)
 {#for each fasta file  or fastq file in the directory:
 	my $ftype;
@@ -74,20 +82,27 @@ foreach my $filename (@allfiles)
 	my $description="";
 	my $sequence="";
 	my $line="";
-	my $entry_count = 0;
+	
 	while ($line=<IN>)
 	{
 		chomp($line);
 		if ($line=~/^[>@](\S+)\s?(.*)$/)
 		{#if the current line is the description line - begins with '>', and then 
 		 #one or more non-whitespace, followed by 0 or more whitespace char's, then anything until the end
-			$entry_count++;
 			
 			my $name_=$1; 
 			my $description_=$2;
 			$name_ =~ s/[\:\-\\\/]/_/g;
 			if ($name=~/\w/ and $sequence=~/\w/)
 			{#the entire sequence has been read in, so do the conversion:
+			
+				$entry_count++;
+				if ($entry_count % 50000 == 0)
+				{
+	                print "$entry_count\n";
+	                
+	            }
+            
 				my @ret_val = translate_dna($sequence, $description);
 				my $sequence_filtered = 1;
 				if ($ret_val[0] > 6)
@@ -138,7 +153,7 @@ foreach my $filename (@allfiles)
 	}	
 	if ($name=~/\w/ and $sequence=~/\w/)
 	{#do the same as above for the last sequence in the file
-				
+		$entry_count++;
 		my @ret_val = translate_dna($sequence, $description);
 		my $sequence_filtered = 1;
 		if ($ret_val[0] > 6)
@@ -181,11 +196,14 @@ if ($count_fasta == 0)
 	print "Warning: No fasta files processed ($!)!\n";
 	exit(3);
 }
-print "Opening $out_dir/longest_nr.fasta for writing.\n";
+
+my $total_count=0;
 if (open (OUT,">$out_dir/longest_nr.fasta"))
 {#this file will contain the set of the unique, longest length reading frames found with a count in their description of how many dna sequences 
  #resulted in this AA sequence - only the name of the first dna sequence is outputted, following a number for the count
 	print "Success opening $out_dir/longest_nr.fasta for writing.\n";
+	my $total_count=0;
+	my $unique_count=0;
 	foreach my $seq (sort keys %longest_orf)
 	{
 		my $temp=$longest_orf{$seq};
@@ -215,15 +233,27 @@ if (open (OUT,">$out_dir/longest_nr.fasta"))
 				
 			}
 			
-			if ($count==0) { print OUT qq!>$name\n$p1$seq$p2\n!; }
+			if ($count==0) 
+			{ 
+				print OUT qq!>$name\n$p1$seq$p2\n!; 
+				$total_count++;
+			}
 			else
 			{
 				print OUT qq!>$name + $count other\n$p1$seq$p2\n!;
 				#print OUT qq!>$longest_orf{$seq}\n$p1$seq$p2\n!;
+				$total_count += ($count+1);
 			}
+			$unique_count++;
+		}
+		else
+		{
+			print "Error in outputting to file."
 		}
 	}
 	close(OUT);
+	print "Total sequences output: $unique_count\n";
+	print "Total sequences output (including duplicates): $total_count\n";
 }
 else
 {
@@ -231,13 +261,15 @@ else
 	exit(4);
 }
 
+
 if ($OUTPUT_FILTERED_SEQUENCES)
 {
-	print "Opening $out_dir/longest_nr-filtered.fasta for writing.\n";
 	if (open (OUT,">$out_dir/longest_nr-filtered.fasta"))
 	{#this file will contain the set of the unique, longest length reading frames found with a count in their description of how many dna sequences 
 	 #resulted in this AA sequence - only the name of the first dna sequence is outputted, following a number for the count
 		print "Success opening $out_dir/longest_nr-filtered.fasta for writing.\n";
+		my $total_count=0;
+		my $unique_count=0;
 		foreach my $seq (sort keys %filtered_longest_orf)
 		{
 			my $temp=$filtered_longest_orf{$seq};
@@ -267,15 +299,27 @@ if ($OUTPUT_FILTERED_SEQUENCES)
 					
 				}
 				
-				if ($count==0) { print OUT qq!>$name\n$p1$seq$p2\n!; }
+				if ($count==0) 
+				{ 
+					print OUT qq!>$name\n$p1$seq$p2\n!; 
+					$total_count++;
+				}
 				else
 				{
 					print OUT qq!>$name + $count other\n$p1$seq$p2\n!;
 					#print OUT qq!>$filtered_longest_orf{$seq}\n$p1$seq$p2\n!;
+					$total_count += ($count+1);
 				}
+				$unique_count++;
+			}
+			else
+			{
+				print "Error in outputting to file."
 			}
 		}
 		close(OUT);
+		print "Total sequences output: $unique_count\n";
+		print "Total sequences output (including duplicates): $total_count\n";
 	}
 	else
 	{
@@ -302,11 +346,32 @@ sub translate_dna
 		my $frame;
 		my $direction;
 		
-		$description =~ /^([pX]\S?)=?(\w*) ([pX]\S?)=?(\w*)/;
-		my $r1_primer = $1;
-		my $r1_primer_seq = $2;
-		my $r2_primer = $3;
-		my $r2_primer_seq = $4;
+		my $r1_primer="";
+		my $r1_primer_seq="";
+		my $r2_primer="";
+		my $r2_primer_seq="";
+		
+		if($new_primers)
+		{
+			$description =~ /^([pX][12]?_?[SL]?H?)=?(\w*) ([pX][12]?_?[SL]?H?)=?(\w*)/;
+			$r1_primer = $1;
+			$r1_primer_seq = $2;
+			$r2_primer = $3;
+			$r2_primer_seq = $4;
+		}
+		else
+		{
+			$description =~ /^([pX]\S?)=?(\w*) ([pX]\S?)=?(\w*)/;
+			$r1_primer = $1;
+			$r1_primer_seq = $2;
+			$r2_primer = $3;
+			$r2_primer_seq = $4;
+		}
+		
+		if($r1_primer eq 'X' or $r2_primer eq 'X')
+		{
+			my $hi = 1;
+		}
 		if ($r1_primer eq 'p1')
 		{
 			$direction = 'fwd';
@@ -319,7 +384,7 @@ sub translate_dna
 			}
 			
 		}
-		elsif($r1_primer eq 'p2')
+		elsif($r1_primer eq 'p2' || $r1_primer eq 'p2_LH' || $r1_primer eq 'p2_SH')
 		{
 			if ($r2_primer eq 'p1')
 			{
@@ -327,37 +392,61 @@ sub translate_dna
 				$frame = 1;
 			}
 			else
-			{
+			{ #r1 primer is p2 but p1 not found in r2
 				$direction = 'rev';
-				$frame = $size % 3;
+				if ($r1_primer eq 'p2_SH')
+				{
+                    $frame = ($size % 3) + 1;
+					if ($frame == 3) { $frame = 0; }
+                }
+                else
+				{
+					$frame = $size % 3;
+				}
 				
 				#correct for unusual case where same primer found in both r1 and r2, by ignoring r2 primer
-				if ($r2_primer eq 'p2')
+				if ($r2_primer eq 'p2' || $r2_primer eq 'p2_LH' || $r2_primer eq 'p2_SH')
 				{
 					$r2_primer_seq = '';
 				}
 			}
 		}
 		else
-		{
+		{#r1 primer not found
 			if ($r2_primer eq 'p1')
 			{
 				$direction = 'rev';
 				$frame = 1;
 			}
-			else #($r2_primer eq 'p2')
+			else # $r2 primer is p2 but p1 not found in r1
 			{
 				$direction = 'fwd';
-				$frame = $size % 3;
+				if ($r2_primer eq 'p2_SH')
+				{
+                    $frame = ($size % 3) + 1;
+					if ($frame == 3) { $frame = 0; }
+                }
+                else
+				{
+					$frame = $size % 3;
+				}
 			}
 		}
 		my $seq;
-		if ($direction =~ /^fwd$/) { $seq=$sequence; } 
+		if ($direction =~ /^fwd$/)
+		{
+			$seq=$sequence;
+			if($r2_primer eq 'p2_SH')
+			{ $seq = $seq . 'G'; }
+		} 
 		else 
-		{ 
+		{
 			$seq = reverse $sequence;
 			$seq =~ tr/ATCG/TAGC/;
+			if($r1_primer eq 'p2_SH')
+			{ $seq = $seq . 'C'; }
 		}
+		
 		my @ret_vals = translate_frame($seq,$frame,$size, 0);	
 			
 		if ($direction eq 'fwd')
@@ -365,7 +454,16 @@ sub translate_dna
 			#p2 translation
 			if ($r2_primer_seq)
 			{
-				my @ret_vals = translate_frame($r2_primer_seq, 0, length($r2_primer_seq), 1);
+				my @ret_vals;
+				if ($r2_primer eq 'p2_SH')
+				{
+					@ret_vals = translate_frame($r2_primer_seq, 1, length($r2_primer_seq), 1);
+                }
+				else
+				{# p2_LH or p2
+					@ret_vals = translate_frame($r2_primer_seq, 0, length($r2_primer_seq), 1);
+				}
+                
 				$r2_primer_seq = $ret_vals[1];
 			}
 			#p1 translation
@@ -379,8 +477,10 @@ sub translate_dna
 					if (($l_diff % 3) == 1) { $r1_frame = 2; }
 					if (($l_diff % 3) == 0) { $r1_frame = 0; }
 				}
-				$r1_primer_seq = $r1_primer_seq . 'G'; 
 				
+				if ($new_primers) { $r1_primer_seq = $r1_primer_seq . 'T'; }
+				else { $r1_primer_seq = $r1_primer_seq . 'G'; }
+                
 				my @ret_vals = translate_frame($r1_primer_seq, $r1_frame, length($r1_primer_seq), 1);
 				$r1_primer_seq = $ret_vals[1];
 			}
@@ -395,8 +495,16 @@ sub translate_dna
 				$r1_primer_seq = reverse $r1_primer_seq;
 				$r1_primer_seq =~ tr/ATCG/TAGC/;
 				
-				my @ret_vals = translate_frame($r1_primer_seq, 0, length($r1_primer_seq), 1);
-				$r1_primer_seq = $ret_vals[1];
+				my @ret_vals;
+				if ($r1_primer eq 'p2_SH')
+				{
+					@ret_vals = translate_frame($r1_primer_seq, 1, length($r1_primer_seq), 1);
+				}
+				else
+				{
+					@ret_vals = translate_frame($r1_primer_seq, 0, length($r1_primer_seq), 1);
+				}
+				$r1_primer_seq = $ret_vals[1]; 
 			}
 			
 			#p1 translation
@@ -410,7 +518,10 @@ sub translate_dna
 					if (($l_diff % 3) == 1) { $r1_frame = 2; }
 					if (($l_diff % 3) == 0) { $r1_frame = 0; }
 				}
-				$r2_primer_seq = 'C' . $r2_primer_seq;
+				
+				if ($new_primers) { $r2_primer_seq = 'A' . $r2_primer_seq; }
+				else { $r2_primer_seq = 'C' . $r2_primer_seq; }
+				
 				$r2_primer_seq = reverse $r2_primer_seq;
 				$r2_primer_seq =~ tr/ATCG/TAGC/;
 				
@@ -472,15 +583,15 @@ sub translate_frame
 		else { $protein.="X"; } # X is unknown, doesn't code for anything must be error in sequence
 	}
 	
+	#remove X's at beginning and end
+	$protein =~ s/X+$//;
+	$protein =~ s/^X+//;
+	
 	if (!$split_orfs)
 	{
 		return (length($protein),$protein);
 	}
 	
-	#remove X's at beginning and end
-	$protein =~ s/X+$//;
-	$protein =~ s/^X+//;
-
 	my $temp="$protein*";
 	my $index=0;
 	

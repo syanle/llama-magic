@@ -3,7 +3,8 @@
 use strict;
 #use warnings;
 use POSIX;
-use JSON;
+#use JSON;
+
 
 my $img_source_plus = '/llama-magic-html/plus.gif';
 my $img_source_minus = '/llama-magic-html/minus.gif';
@@ -16,16 +17,15 @@ my $db_filename="";
 my $tandem_output_filename="";
 my $PEPTIDE_FILTER_MIN = 1.2; 
 my $MIN_SEQ_LENGTH = 107;
-my $P1_SEQ_LENGTH = 10;
-my $P2_SEQ_LENGTH = 6;
+my $FILTER_FIX_SEQ_END=1; #when primers not used
+my $NUM_AA_AFTER_QVT=6; #when primers not used
 my $MIN_CDR3_COV_PERC = 25; 
 my $MAX_PROTEINS_IN_FILE = 5000;
 my $MAX_GROUPS_IN_FILE = 500;
 my $MAX_GROUP_PROTEINS_IN_FILE = 10; #25;
 my $RK_FIXATION = 1;
 my @TAIL_SEQUENCES = ("SEPKIPQPQPKPQ", "SAHHSEDPSSKCP", "SEPKTPKPQPQPQPQ", "SGTNEVCKCPKCPAPEL", "EPKIPQPQPKPQ", "AHHSEDPSSKCP", "EPKTPKPQPQPQPQ", "GTNEVCKCPKCPAPEL");
-my $FILTER_FIX_SEQ_END = 1;
-my $NUM_AA_AFTER_QVT = 6;
+
 my $NEW_CDR3_METHOD = 1;
 my $incompletes = 1;
 my %peptide_index = ();
@@ -52,6 +52,7 @@ my $stand_alone = 0; #this var will determine how we examine the input file cont
 		     #through llama-magic OR was it manually processed and provided to us - in each case the format is different
 my $show_score;
 my $use_primers;
+my $new_primers;
 my $use_tail;
 my $peptide_index_filename;
 my $use_index;
@@ -61,41 +62,48 @@ my $create_cdr3_fasta_by_cov = 0;
 
 my $filter_cdr3 = 0;
 my $filter_cdr3_filename = "C:\\Code\\NCDIR\\Llama\\results\\54\\110\\tandem\\results\\output.xml.peptide_list.0.1.cdr3_cov75.fasta";
-#"C:\\Code\\NCDIR\\Llama\\results\\54\\110\\tandem\\results\\output.xml.peptide_list.0.1.cdr3_cov75.fasta"; 54/121
-#"C:\\Code\\NCDIR\\Llama\\results\\54\\110\\tandem\\results\\output.xml.peptide_list.0.1.cdr3_cov50.fasta"; 54/120
-#"C:\\Code\\NCDIR\\Llama\\results\\54\\110\\tandem\\results\\output.xml.peptide_list.0.1.cdr3_cov25.fasta"; 54/119
-
-#"C:\\Code\\NCDIR\\Llama\\results\\59\\26\\tandem\\results\\output.xml.peptide_list.0.1.cdr3_cov75.fasta"; 59/40
-#"C:\\Code\\NCDIR\\Llama\\results\\59\\26\\tandem\\results\\output.xml.peptide_list.0.1.cdr3_cov50.fasta"; 59/39
-#"C:\\Code\\NCDIR\\Llama\\results\\59\\26\\tandem\\results\\output.xml.peptide_list.0.1.cdr3_cov25.fasta"; 59/38
-
-#"C:\\Code\\NCDIR\\Llama\\results\\59\\31\\tandem\\results\\output.xml.peptide_list.0.1.cdr3_cov75.fasta"; 59/37 
-#"C:\\Code\\NCDIR\\Llama\\results\\59\\31\\tandem\\results\\output.xml.peptide_list.0.1.cdr3_cov50.fasta"; 59/36
-#"C:\\Code\\NCDIR\\Llama\\results\\59\\31\\tandem\\results\\output.xml.peptide_list.0.1.cdr3_cov25.fasta"; 59/35
-
-#"C:/Code/NCDIR/Llama/results/59/protein/cdr3_to_filter_5095_7_17_overlap.fasta";
-#"C:/Code/NCDIR/Llama/results/58/protein/cdr3_to_filter_5095_7_17_overlap.fasta";
 
 if ($ARGV[0]=~/\w/) { $filename="$ARGV[0]"; } 
-else { $filename="C:\\Code\\NCDIR\\Llama\\results\\54\\121\\tandem\\results\\output.xml.peptide_list.0.1.txt"; }
+else { $filename="/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/results/69/1001/tandem/results/output.xml.peptide_list.0.1.txt"; }
 
 if ($ARGV[1]=~/\w/) { $db_filename="$ARGV[1]"; }
-else { $db_filename="C:\\Code\\NCDIR\\Llama\\results\\54\\protein\\longest_nr.fasta"; }
+else { $db_filename="/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/results/69/protein/longest_nr.fasta"; }
 
 if ($ARGV[2]=~/\w/) { $tandem_output_filename="$ARGV[2]"; }
-else { $tandem_output_filename="C:\\Code\\NCDIR\\Llama\\results\\54\\121\\tandem\\results\\output.xml"; }
+else { $tandem_output_filename="/results/69/1001/tandem/results/output.xml"; }
 
-if ($ARGV[2]=~/\w/) { $peptide_index_filename="$ARGV[3]"; } #if file exists, index will be used else index won't be used
-else { $peptide_index_filename = "C:\\Code\\NCDIR\\Llama\\results\\54\\protein\\protein_peptides.fasta"; }
+if ($ARGV[3]=~/\w/) { $peptide_index_filename="$ARGV[3]"; } #if file exists, index will be used else index won't be used
+else { $peptide_index_filename = "/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/results/69/protein/protein_peptides.fasta"; }
 
-if ($ARGV[3]=~/\w/) { $show_score=$ARGV[4]; }
+if ($ARGV[4]=~/\w/) { $show_score=$ARGV[4]; }
 else { $show_score = 1; }
 
-if ($ARGV[4]=~/\w/) { $use_primers=$ARGV[5]; }
+if ($ARGV[5]=~/\w/) { $use_primers=$ARGV[5]; }
 else { $use_primers = 1; } ### <------NOTE!!
 
-if ($ARGV[5]=~/\w/) { $use_tail=$ARGV[6]; }
-else { $use_tail = 1; } ### <------NOTE!!
+if ($ARGV[6]=~/\w/) { $use_tail=$ARGV[6]; }
+else { $use_tail = 0; } ### <------NOTE!!
+
+if($ARGV[7]=~/\w/) { $new_primers=$ARGV[7]; }
+else { $new_primers=1; } ### <------NOTE!!
+
+#primer params
+my $P1_SEQ_LENGTH;
+my $P2_LH_SEQ_LENGTH;
+my $P2_SH_SEQ_LENGTH;
+my $P2_SEQ_LENGTH;
+if($new_primers)
+{
+	$P1_SEQ_LENGTH = 8;
+	$P2_SH_SEQ_LENGTH = 6; 
+	$P2_LH_SEQ_LENGTH = 8; 
+	$P2_SEQ_LENGTH = $P2_LH_SEQ_LENGTH;
+}
+else
+{
+	$P1_SEQ_LENGTH = 10;
+	$P2_SEQ_LENGTH = 6;
+}
 
 my $cluster = 0;
 if ($cluster)
@@ -130,7 +138,9 @@ print LOG "filename=$filename\n";
 print LOG "db_filename=$db_filename\n";
 print LOG "tandem_output_filename=$tandem_output_filename\n";
 print LOG "use_tail=$use_tail\n";
+print LOG "show_score=$show_score\n";
 print LOG "use_primers=$use_primers\n";
+print LOG "new_primers=$new_primers\n";
 
 ###########Reading in peptide data################################################################
 my %peptides=(); #the peptides, $peptides{seq} = 1
@@ -238,7 +248,7 @@ my $gene_count;
 my $sequence="";
 my $count_seq=0; my $all_length_count_seq=0; 
 while ($line=<IN>)
-{# M00587_82_000000000_AA4PE_1_1101_23494_1982_1_rev_fr1_fwd_MAQVQLAESG_rev_TQVTVS
+{
 	my $name_; my $gene_count_ = 0;
 	$line =~ s/\r\n$//;
 	$line =~ s/\n$//;
@@ -274,7 +284,8 @@ while ($line=<IN>)
 				}
 				
 			}
-			elsif(filter_input($sequence)) { $protein_passed = 1; }  #check length from first M is atleast 107 and trim sequence, also check for QVT
+			elsif(filter_input($sequence)) { $protein_passed = 1; }  
+			#check length from first M is atleast 107 and trim sequence, also check for QVT
 			 
 			if($protein_passed)
 			{
@@ -457,13 +468,9 @@ my %aa_pos_37; my %aa_pos_44; my %aa_pos_45; my %aa_pos_47; my $count_cdr1_diff_
 #foreach my $pep (keys %peptides) { $peptide_proteins_count{$pep}=0; }
 foreach my $name (keys %proteins)
 {
-	#if ($name eq "M00587_82_000000000_AA4PE_1_1102_12649_9127_1_fwd_fr1")
-	#if ($name =~ /M00587_82_000000000_AA4PE_1_1103_6981_17824/)
-	#{
-	#	my $jjj=0;
-	#}
+	
 			
-	#CDR finding0
+	#CDR finding
 	my $cdr1_l_pos; my $cdr1_r_pos;	my $cdr2_l_pos; my $cdr2_r_pos;	my $cdr3_l_pos; my $cdr3_r_pos;
 	
 	find_cdr1($proteins{$name}, $cdr1_l_pos, $cdr1_r_pos);
@@ -473,6 +480,12 @@ foreach my $name (keys %proteins)
 		find_cdr3_new($proteins{$name}, $cdr2_r_pos, $cdr3_l_pos, $cdr3_r_pos);
 	}
 	else { find_cdr3($proteins{$name}, $cdr3_l_pos, $cdr3_r_pos); }
+	
+	#if ($name eq "M03851_176_000000000_AVEP6_1_1109_18249_4261_1_rev_fr1")
+	if ($name =~ /M03851_176_000000000_AVEP6_1_2111_5779_19483_1_rev_fr1/)
+	{
+		my $jjj=0;
+	}
 	
 	if ($check_for_VH)
 	{
@@ -522,10 +535,14 @@ foreach my $name (keys %proteins)
 	{ $peptides_to_map = \%peptides; }
 	
 	my $seq = $proteins{$name};
-	if ($FILTER_FIX_SEQ_END && !$use_primers)
-	{#remove X's that were put on the sequence to standardize length and correctly identify the CDR regions
-		$seq =~ s/X+$//;
-	}
+	
+#	if ($FILTER_FIX_SEQ_END && !$use_primers) # ** do this even if $use_primers? or if $new_primers?
+#	{#remove X's that were put on the sequence to standardize length and correctly identify the CDR regions
+#		$seq =~ s/X+$//;
+#	}
+	$seq =~ s/X+$//;
+	$seq =~ s/^X+//;
+	
 	my $orig_seq_len = length($seq);
 	my $total_seq_len = $orig_seq_len;
 	
@@ -625,13 +642,15 @@ foreach my $name (keys %proteins)
 		$protein_coverage_stats[$stat_i][5] = sprintf("%.1f", ($cover_n / $total_seq_len) * 100);
 		$protein_coverage_stats[$stat_i][6] = $total_seq_len;
 		$protein_coverage_stats[$stat_i][7] = $name;
+		
 		my $s = 8*($cover_cdr3 / $cdr3_len) +
-			2*($cover_cdr2 / ($cdr2_r_pos - $cdr2_l_pos + 1)) +
-			2*($cover_cdr1 / ($cdr1_r_pos - $cdr1_l_pos + 1)) +
-			2*($cover_n / $total_seq_len) +
-			$cdr3_len/15 +
-			($cdr2_r_pos - $cdr2_l_pos + 1)/10 +
-			($cdr1_r_pos - $cdr1_l_pos + 1)/9;
+				2*($cover_cdr2 / ($cdr2_r_pos - $cdr2_l_pos + 1)) +
+				2*($cover_cdr1 / ($cdr1_r_pos - $cdr1_l_pos + 1)) +
+				2*($cover_n / $total_seq_len) +
+				$cdr3_len/15 +
+				($cdr2_r_pos - $cdr2_l_pos + 1)/10 +
+				($cdr1_r_pos - $cdr1_l_pos + 1)/9;
+		
 		$protein_coverage_stats[$stat_i][8] = sprintf("%.1f", $s);
 		$stat_i++;
 		
@@ -1151,6 +1170,7 @@ for(my $group_count = -1, my $cur_group_i = 0, my $real_group_count = 1, my $tot
 	my @seq = split('', $sequence);
 	my $u_on = 0;
 	my $cdr_i = 1;
+	
 	for(my $i = 0; $i <= $#seq; $i++)
 	{
 		my $pre = ""; my $post = "";
@@ -1309,6 +1329,13 @@ sub find_cdr1
 	my $default_left_area=28; my $default_right_area=36;
 	my $default_cdr_len = 8;
 	
+	if($new_primers)
+	{#shift for new primers to the right
+		$left_area_start+=9; $left_area_end+=9;
+		$right_area_start+=9; $right_area_end+=9;
+		$default_left_area+=9; $default_right_area+=9;
+	}
+	
 	#STARTING POS. OF CDR1:
 	my $left_area = substr($seq, $left_area_start, $left_area_end-$left_area_start+1); #look from pos. 20 - 26 of seq (0-based)
 	my $la_i; my $left_cdr = -1;
@@ -1348,6 +1375,13 @@ sub find_cdr2
 	my $default_left_area=51; my $default_right_area=60;
 	my $default_cdr_len = 9;
 	
+	if($new_primers)
+	{#shift for new primers to the right
+		$left_area_start+=9; $left_area_end+=9;
+		$right_area_start+=9; $right_area_end+=9;
+		$default_left_area+=9; $default_right_area+=9;
+	}
+	
 	#STARTING POS. OF CDR2:
 	my $left_area = substr($seq, $left_area_start, $left_area_end-$left_area_start+1); #look from pos. 32 - 40 of seq (0-based)
 	my $la_i; my $left_cdr = -1;
@@ -1385,6 +1419,7 @@ sub find_cdr3_new
 	my $right_area_start; my $right_area_end;
 	my $default_left_area; my $default_right_area;
 	my $default_cdr_len = 11;
+	
 	if ($use_primers)
 	{#if primers were located, p2 is placed in sequence, but the random 12-mer portion following p2 is removed
 	 #so CDR3-finding must be adjusted - reduced by 4 AA's (corresponds to random 12-mer of nucleotide seq)
@@ -1394,6 +1429,24 @@ sub find_cdr3_new
 		
 		$default_left_area = 17;
 		$default_right_area = 6;
+		if($new_primers)
+		{
+				$left_area_start+=9; $left_area_end+=9;
+		
+				#determine SH or LH
+#				my $primer2_str = substr($seq, -1*$P2_LH_SEQ_LENGTH);
+#				my $count_LH = ( $primer2_str ^ "PKTPKPQP" ) =~ tr/\0//c; #gives number of mismatches
+#				$primer2_str = substr($seq, -1*$P2_SH_SEQ_LENGTH);
+#				my $count_SH = ( $primer2_str ^ "HHSEDP" ) =~ tr/\0//c;
+#				my $subtract_amt;
+#				if($count_LH < $count_SH) { $subtract_amt=10; }
+#				else { $subtract_amt=8; }
+
+				my $subtract_amt = 10;
+			
+				$right_area_start-=$subtract_amt; $right_area_end-=$subtract_amt;
+				$default_left_area-=$subtract_amt; my $default_right_area-=$subtract_amt;
+		}
 	}
 	else
 	{

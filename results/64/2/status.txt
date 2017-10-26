@@ -1,0 +1,8 @@
+Calling: "../tandem.exe" "C:\Code\NCDIR\Llama/results/64/2/tandem/input.xml"
+
+Calling: "../parse_xtandem_llama.pl" "C:\Code\NCDIR\Llama/results/64/2/tandem/results" "0.1"
+
+Calling: "../map_peptides_to_proteins.pl" "C:\Code\NCDIR\Llama/results/64/2/tandem/results/output.xml.peptide_list.0.1.txt" "C:\Code\NCDIR\Llama/results/64/protein/longest_nr.fasta" "/results/64/2/tandem/results/output.xml" "C:\Code\NCDIR\Llama/results/64/protein/protein_peptides.fasta" "1" "1" "1"
+
+DONE
+

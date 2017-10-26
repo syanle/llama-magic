@@ -1,4 +1,4 @@
-#!C:/Perl/bin/perl
+#!/usr/local/ActivePerl-5.24/bin/perl
 ##
 ##
 ## peptide.pl

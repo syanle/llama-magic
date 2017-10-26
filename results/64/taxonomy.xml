@@ -1,0 +1,12 @@
+<?xml version="1.0"?><bioml label="x! taxon-to-file matching list">
+
+<taxon label="llama">
+	<file format="peptide" URL="/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/results/64/protein/longest_nr_predigested.fasta" />
+</taxon>
+
+<taxon label="llama_constant">
+	<file format="peptide" URL="/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/results/64/protein/longest_nr_predigested.fasta" />
+	<file format="peptide" URL="/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/constant_regions/all_predigested.fasta" />
+</taxon>
+
+</taxon></bioml>

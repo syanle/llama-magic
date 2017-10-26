@@ -1,19 +1,19 @@
-Alias /llama-magic/ "D:/NCDIR/Llama/results/"
-<Directory "D:/NCDIR/Llama/results/">
+Alias /llama-magic/ "/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/results/“
+<Directory "/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/results/“>
     AllowOverride None
     Options None
     Order allow,deny
     Allow from all
 </Directory>  
-Alias /llama-magic-html/ "D:/NCDIR/Llama/html/"
-<Directory "D:/NCDIR/Llama/html/">
+Alias /llama-magic-html/ "/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/html/“
+<Directory "/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/html/“>
     AllowOverride None
     Options None
     Order allow,deny
     Allow from all
 </Directory>
-ScriptAlias /llama-magic-cgi/ "D:/NCDIR/Llama/cgi-bin/"
-<Directory "D:/NCDIR/Llama/cgi-bin/">
+ScriptAlias /llama-magic-cgi/ "/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/cgi-bin/"
+<Directory "/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/cgi-bin/">
     AllowOverride None
     Options None
     Order allow,deny

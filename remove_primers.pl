@@ -158,8 +158,8 @@ sub remove_primers
 	my $seq = shift;
 	my $seq_len = length($seq);
 	my $fixed_seq = '';
-	#look for p1 primer at position 0+12 of sequence (all 4 versions) - allow 8 mismatches
-	#look for p2 primer at position 0+13 of sequence - allow 4 mismatches
+	#look for p1 adaptor at position 0+12 of sequence (all 4 versions) - allow 8 mismatches
+	#look for p2 adaptor at position 0+13 of sequence - allow 4 mismatches
 	#see which one matches the best, and remove based on the best match
 	my $r1_max_match_ratio = -1;
 	my $r1_max_match_mismatches = 0;
@@ -176,7 +176,7 @@ sub remove_primers
 	{
 		my @start_pos_range = (-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20); 
 		foreach my $start_pos (@start_pos_range)
-		{ #positions in the sequence to look for primer
+		{ #positions in the sequence to look for adaptor
 			if ($p_id eq 'p2' && $start_pos < -1*$max_p2_allowed_mismatches) { next; }
 			
 			my $start_at; my $end_at;
@@ -238,15 +238,15 @@ sub remove_primers
 	{ $r1_primer_found = 1; }
 	
 	#look for r2 primer:
-	#look for rev. complement of p1 primer at position seq_len-12 of sequence (all 4 versions) - allow 8 mismatches
-	#look for rev. complement of p2 primer at position seq_len-13 of sequence - allow 4 mismatches
+	#look for rev. complement of p1 adaptor at position seq_len-12 of sequence (all 4 versions) - allow 8 mismatches
+	#look for rev. complement of p2 adaptor at position seq_len-13 of sequence - allow 4 mismatches
 	#see which one matches the best, and remove based on the best match
 	
 	foreach my $p_id (keys %primers_rc)
 	{
 		my @start_pos_range = (-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20); #
 		foreach my $start_pos (@start_pos_range)
-		{ #positions in the sequence to look for primer
+		{ #positions in the sequence to look for adaptor
 			if ($p_id eq 'p2' && $start_pos < -1*$max_p2_allowed_mismatches) { next; }
 			
 			my $start_at; my $end_at;

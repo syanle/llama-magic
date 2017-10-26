@@ -12,20 +12,20 @@
 
 use warnings;
 use strict;
-use JSON; # imports encode_json, decode_json, to_json and from_json.
+#use JSON; # imports encode_json, decode_json, to_json and from_json.
 
 my $dir;
 my $incompletes;
 my $use_tail;
 
-if ($ARGV[0] && $ARGV[0]=~/\w/) { $dir=$ARGV[0];}  #C:\Code\NCDIR\Llama\results\58\protein\temp
-else { $dir = "C:\\Code\\NCDIR\\Llama\\results\\58\\protein\\temp"; } #C:\\Code\\NCDIR\\Llama\\results\\61\\protein"; } 
+if ($ARGV[0] && $ARGV[0]=~/\w/) { $dir=$ARGV[0];}  
+else { $dir = "/Users/sarahkeegan/fenyolab/data_and_results/Llama_MiSeq/MISEQ_DB_2017_06_12/2015-5094-H/trimmed/merged/fasta/removed_primers/translated/"; } 
 
 if ($ARGV[1] && $ARGV[1]=~/\w/) { $incompletes=$ARGV[1];}
 else { $incompletes=1; }
 
 if ($ARGV[2] && $ARGV[2]=~/\w/) { $use_tail=$ARGV[2];}
-else { $use_tail=1; }
+else { $use_tail=0; }
 
 my %protein_peptides = ();
 
@@ -220,6 +220,14 @@ else
 	print "Error creating $dir/all_predigested.fasta\n";
 	exit(1);
 }
+
+##save to JSON the protein peptides index
+#my $utf8_encoded_json_text = encode_json \%protein_peptides;
+#if (open (IND_OUT, ">$dir/protein_peptides.json"))
+#{
+#	print IND_OUT $utf8_encoded_json_text;
+#	close(IND_OUT);
+#}
 
 exit(0);
 

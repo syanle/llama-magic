@@ -1,4 +1,13 @@
-#!C:/Perl/bin/perl 
+#!/usr/local/ActivePerl-5.24/bin/perl
+
+use strict;
+use warnings;
+use CGI ':standard';
+use Proc::Background;
+
+#use File::Path qw(make_path remove_tree);
+#changed to not use this package since old version of ActiveState Perl on Rockefeller server and ppm not supported to get packages any longer 
+
 #web interface for programs to find the best Llama nanobodies based on peptide mapping (from MS data) and CDR regions
 #INPUT: DNA sequence files and MS files, XTandem parameters
 #OUTPUT: HTML page with ranked, grouped nanobodies (also showing peptide mapping and highlighted CDR1/2/3 regions)
@@ -6,13 +15,6 @@
 #XTandem search with MS data against the pre-digested protein sequences -> Map XTandem peptides (> min. Expectation)
 #back to the sequences -> find CDR regions -> rank nanobodies based on coverage of CDR regions, etc. -> group nanobodies
 #with the same CDR regions (0 or 1 difference in AA) -> HTML displayed output of this list
-
-use strict;
-use warnings;
-use CGI ':standard';
-use Proc::Background;
-#use File::Path qw(make_path remove_tree);
-#changed to not use this package since old version of ActiveState Perl on Rockefeller server and ppm not supported to get packages any longer 
 
 my $DBLIST_FILE = "db_list.txt";
 my $MSLIST_FILE = "ms_list.txt";
@@ -28,152 +30,163 @@ my $img_source_new = '/llama-magic-html/add_item.png';
 my $DEVELOPER_VERSION = 1;
 #my $DEVELOPER_VERSION = 0;
 my $DEVELOPER_LOGFILE = "cgi_dev_log.txt";
-my $BASE_DIR = "C:/NCDIR/Llama"; #default, changed when settings.txt file is read 
+my $BASE_DIR = "/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/results/"; #default, changed when settings.txt file is read 
 my $RESULTS_DIR = "results"; 
 my %ALLOWED_DNA_FILE_TYPES = ('fa' => '1', 'fas' => '1', 'fast' => '1', 'fasta' => '1', 'fastq' => '1', 'fq' => '1');
 my %ALLOWED_MS_FILE_TYPES = ('mgf' => '1');
 
 eval #for exception handling
 {
-    if($DEVELOPER_VERSION) { open(DEVEL_OUT, ">>$BASE_DIR/$DEVELOPER_LOGFILE"); }
+    if($DEVELOPER_VERSION)
+    {
+        if(!open(DEVEL_OUT, ">>../results/$DEVELOPER_LOGFILE"))
+        {
+            print STDERR "Error: Cound not open DEVEL_OUT file: ../results/$DEVELOPER_LOGFILE ($!)"
+        }
+    }
     if($DEVELOPER_VERSION) { print DEVEL_OUT "Opened developer log file...\n"; }
     
     my $err = "";
     if($err = read_settings())
     {
-	display_error_page("Cannot load settings file: $err");
-	if($DEVELOPER_VERSION) { print DEVEL_OUT "Cannot load settings file: $err\n"; }
+		display_error_page("Cannot load settings file: $err");
+		if($DEVELOPER_VERSION) { print DEVEL_OUT "Cannot load settings file: $err\n"; }
     }
     else
     {
-	if($DEVELOPER_VERSION) { print DEVEL_OUT "Loaded settings file: BASE_DIR = $BASE_DIR\n"; }
-	if(!param())
-	{#no posted data
-	    display_home_page();
-	}
-	else
-	{#form data was posted: process the data
-	    my @params = param();
-	    my $action = param('submit');
-	    
-	    if($DEVELOPER_VERSION) { print DEVEL_OUT "$action\n"; }
-	    
-	    if ($action eq 'Home')
-	    {
-		display_home_page();
-	    }
-	    elsif($action eq 'Upload')
-	    {
-		#get db name from html form
-		my $db_name = param('db_name');
-		my @turned_on = param('db_params');
-		my $USE_PRIMERS = 0; 
-		my $ADD_TAIL_SEQUENCES = 0; 
-		foreach my $param (@turned_on)
-		{
-		    if ($param eq 'use_primers')
-		    {
-			$USE_PRIMERS = 1;
-		    }
-		    if ($param eq 'add_tails')
-		    {
-			$ADD_TAIL_SEQUENCES = 1;
-		    }
-		    
-		}
-		
-		if ($db_name eq "")
-		{
-		    display_error_page("Error: Please provide a name for the new database.");
+		if($DEVELOPER_VERSION) { print DEVEL_OUT "Loaded settings file: BASE_DIR = $BASE_DIR\n"; }
+		if(!param())
+		{#no posted data
+		    display_home_page();
 		}
 		else
-		{
-		    my $err_str = "";
+		{#form data was posted: process the data
+		    my @params = param();
+		    my $action = param('submit');
 		    
-		    #create new db: creates directory structure, uploads files, and adds to db list
-		    my $new_dir = "";
-		    $err_str = create_new_db($db_name, $new_dir);
-		    if ($err_str) { die $err_str; }
+		    if($DEVELOPER_VERSION) { print DEVEL_OUT "$action\n"; }
 		    
-		    #create param file so we know if the db was created with primer identification and with tail sequences
-		    if(!open(OUT, ">$BASE_DIR/$RESULTS_DIR/$new_dir/db_params.txt"))
-		    { die "Error creating db params file: '$BASE_DIR/$RESULTS_DIR/$new_dir/db_params.txt'"; }
-		    print OUT "USE_PRIMERS=$USE_PRIMERS\nADD_TAIL_SEQUENCES=$ADD_TAIL_SEQUENCES\n";
-		    close(OUT);
-		    
-		    #run translation from dna to protein and digest with trypsin -> protein db files
-		    #(run asynchronously so the CGI program can return...)
-		    #`"run_llama_scripts.pl" "db_scripts" "$BASE_DIR/$RESULTS_DIR/$new_dir"`;
-		    my $proc1 = Proc::Background->new('C:/perl/bin/perl.exe', 'run_llama_scripts.pl', 'db_scripts', "$BASE_DIR/$RESULTS_DIR/$new_dir", $USE_PRIMERS, $ADD_TAIL_SEQUENCES);
-		    
-		    #return informative message to user...
-		    display_message_page("Your new database has been uploaded.  You should see it listed on the home page.  \
-					 The link for the new database will become active once the predigested protein files have been created."); 
-		}
-	    }
-	    elsif($action eq 'Create Candidate List')
-	    {
-		#get ms search name from html form
-		my $db_id = param('ms_db_id');
-		my $ms_name = param('ms_name');
-		my $parent_err = param('mass_error');
-		my $frag_err = param('frag_mass_error');
-		my $parent_err_units = param('parent_error_units');
-		my $frag_err_units = param('frag_error_units');
-		
-		my @turned_on = param('search_params');
-		my $ADD_CONSTANTS = 0; 
-		foreach my $param (@turned_on)
-		{
-		    if ($param eq 'add_constants')
+		    if ($action eq 'Home')
 		    {
-			$ADD_CONSTANTS = 1;
+				display_home_page();
+		    }
+		    elsif($action eq 'Upload')
+		    {
+				#get db name from html form
+				my $db_name = param('db_name');
+				my @turned_on = param('db_params');
+				my $USE_PRIMERS = 0; 
+				my $ADD_TAIL_SEQUENCES = 0; 
+				foreach my $param (@turned_on)
+				{
+				    if ($param eq 'use_primers')
+				    {
+						$USE_PRIMERS = 1;
+				    }
+				    if ($param eq 'add_tails')
+				    {
+						$ADD_TAIL_SEQUENCES = 1;
+				    }
+				    
+				}
+			
+				if ($db_name eq "")
+				{
+				    display_error_page("Error: Please provide a name for the new database.");
+				}
+				else
+				{
+				    my $err_str = "";
+				    
+				    #create new db: creates directory structure, uploads files, and adds to db list
+				    my $new_dir = "";
+				    $err_str = create_new_db($db_name, $new_dir);
+				    if ($err_str) { die $err_str; }
+				    
+				    #create param file so we know if the db was created with primer identification and with tail sequences
+				    if(!open(OUT, ">$BASE_DIR/$RESULTS_DIR/$new_dir/db_params.txt"))
+				    { die "Error creating db params file: '$BASE_DIR/$RESULTS_DIR/$new_dir/db_params.txt'"; }
+				    print OUT "USE_PRIMERS=$USE_PRIMERS\nADD_TAIL_SEQUENCES=$ADD_TAIL_SEQUENCES\n";
+				    close(OUT);
+				    
+				    #run translation from dna to protein and digest with trypsin -> protein db files
+				    #(run asynchronously so the CGI program can return...)
+				    #`"run_llama_scripts.pl" "db_scripts" "$BASE_DIR/$RESULTS_DIR/$new_dir"`;
+				    my $proc1 = Proc::Background->new('/usr/local/ActivePerl-5.24/bin/perl', 'run_llama_scripts.pl', 'db_scripts', "$BASE_DIR/$RESULTS_DIR/$new_dir", $USE_PRIMERS, $ADD_TAIL_SEQUENCES);
+				    
+				    #return informative message to user...
+				    display_message_page("Your new database has been uploaded.  You should see it listed on the home page.  \
+							 The link for the new database will become active once the predigested protein files have been created."); 
+				}
+		    }
+		    elsif($action eq 'Create Candidate List')
+		    {
+				#get ms search name from html form
+				my $db_id = param('ms_db_id');
+				my $ms_name = param('ms_name');
+				my $parent_err = param('mass_error');
+				my $frag_err = param('frag_mass_error');
+				my $parent_err_units = param('parent_error_units');
+				my $frag_err_units = param('frag_error_units');
+				
+				my @turned_on = param('search_params');
+				my $ADD_CONSTANTS = 0; 
+				foreach my $param (@turned_on)
+				{
+				    if ($param eq 'add_constants')
+				    {
+						$ADD_CONSTANTS = 1;
+				    }
+				}
+			
+				if ($ms_name eq "") { display_error_page("Error: Please provide a name for this DB Search/Candidate List."); }
+				elsif($parent_err eq "" or $parent_err <= 0) { display_error_page("Error: Parent mass error out of range."); }
+				elsif($frag_err eq "" or $frag_err <= 0) { display_error_page("Error: Fragment mass error out of range."); }
+				else
+				{
+				    my $err_str = "";
+				    
+				    #first, create new dirs and upload ms files to the current project
+				    #also update db list txt file
+				    my $new_dir = "";
+				    $err_str = create_new_search($db_id, $ms_name, $new_dir);
+				    if ($err_str) { die $err_str; }
+				    
+				    #read db params to see if we should use primers and tail sequences
+				    my $USE_PRIMERS = 0; 
+				    my $ADD_TAIL_SEQUENCES = 0;
+                    my $NEW_PRIMERS = 0;
+				    if(open(IN, "<$BASE_DIR/$RESULTS_DIR/$db_id/db_params.txt"))
+				    { 
+						while (<IN>)
+						{
+						    if (/USE_PRIMERS=(\d)/)
+						    {
+								$USE_PRIMERS = $1;
+						    }
+						    if (/ADD_TAIL_SEQUENCES=(\d)/)
+						    {
+								$ADD_TAIL_SEQUENCES = $1;
+						    }
+                            if (/NEW_PRIMERS=(\d)/)
+						    {
+								$NEW_PRIMERS = $1;
+						    }
+						}
+						close(IN);
+				    }
+				    
+				    #(following will run asynchronously so the CGI program can return...)
+				    #do tandem search, then, run map_peptides_to_protein and create candidate list html file
+				    my $proc1 = Proc::Background->new('/usr/local/ActivePerl-5.24/bin/perl', 'run_llama_scripts.pl', 'search_and_map_scripts', "$BASE_DIR/$RESULTS_DIR/$db_id/$new_dir", "$BASE_DIR/$RESULTS_DIR/$db_id",
+								      "$parent_err", "$frag_err", "$parent_err_units", "$frag_err_units", "/$RESULTS_DIR/$db_id/$new_dir", $SHOW_SCORE, $USE_PRIMERS, $ADD_TAIL_SEQUENCES, $ADD_CONSTANTS, $NEW_PRIMERS);
+				    
+				    #return informative message to user...
+				    display_message_page("Your new search has been submitted.  You should see it listed on the home page under the database you selected.  \
+							 The link for the Candidate List will become active once the XTandem! search is complete and the peptide mapping program has ranked the results."); 
+				}
 		    }
 		}
-		
-		if ($ms_name eq "") { display_error_page("Error: Please provide a name for this DB Search/Candidate List."); }
-		elsif($parent_err eq "" or $parent_err <= 0) { display_error_page("Error: Parent mass error out of range."); }
-		elsif($frag_err eq "" or $frag_err <= 0) { display_error_page("Error: Fragment mass error out of range."); }
-		else
-		{
-		    my $err_str = "";
-		    
-		    #first, create new dirs and upload ms files to the current project
-		    #also update db list txt file
-		    my $new_dir = "";
-		    $err_str = create_new_search($db_id, $ms_name, $new_dir);
-		    if ($err_str) { die $err_str; }
-		    
-		    #read db params to see if we should use primers and tail sequences
-		    my $USE_PRIMERS = 0; 
-		    my $ADD_TAIL_SEQUENCES = 0; 
-		    if(open(IN, "<$BASE_DIR/$RESULTS_DIR/$db_id/db_params.txt"))
-		    { 
-			while (<IN>)
-			{
-			    if (/USE_PRIMERS=(\d)/)
-			    {
-				$USE_PRIMERS = $1;
-			    }
-			    if (/ADD_TAIL_SEQUENCES=(\d)/)
-			    {
-				$ADD_TAIL_SEQUENCES = $1;
-			    }
-			}
-			close(IN);
-		    }
-		    
-		    #(following will run asynchronously so the CGI program can return...)
-		    #do tandem search, then, run map_peptides_to_protein and create candidate list html file
-		    my $proc1 = Proc::Background->new('perl.exe', 'run_llama_scripts.pl', 'search_and_map_scripts', "$BASE_DIR/$RESULTS_DIR/$db_id/$new_dir", "$BASE_DIR/$RESULTS_DIR/$db_id",
-						      "$parent_err", "$frag_err", "$parent_err_units", "$frag_err_units", "/$RESULTS_DIR/$db_id/$new_dir", $SHOW_SCORE, $USE_PRIMERS, $ADD_TAIL_SEQUENCES, $ADD_CONSTANTS);
-		    
-		    #return informative message to user...
-		    display_message_page("Your new search has been submitted.  You should see it listed on the home page under the database you selected.  \
-					 The link for the Candidate List will become active once the XTandem! search is complete and the peptide mapping program has ranked the results."); 
-		}
-	    }
-	}
     }
 };
 if ($@)
@@ -665,37 +678,38 @@ sub check_status_file
     #try to open file:
     if (-e "$BASE_DIR/$RESULTS_DIR/$dir/status.txt")
     {
-	open(IN, "$BASE_DIR/$RESULTS_DIR/$dir/status.txt");
-	my @lines = <IN>;
-	close(IN);
-	my $err_str = '';
-	my $done = 0;
-	for(my $i = 0; $i <= $#lines; $i++)
-	{
-	    chomp($lines[$i]);
-	    if ($lines[$i] =~ /^ERROR:/)
-	    {
-		if ($lines[$i] =~ /exited with value/) 
+		open(IN, "$BASE_DIR/$RESULTS_DIR/$dir/status.txt") || print STDERR "Could not open status file: $!";
+		my @lines = <IN>;
+		close(IN);
+		my $err_str = '';
+		my $done = 0;
+		for(my $i = 0; $i <= $#lines; $i++)
 		{
-		    chomp($lines[$i+1]);
-		    if($lines[$i+1] ne ''){ $err_str .= $lines[$i] . ': ' . $lines[$i+1]; }
-		    else { $err_str .= $lines[$i] }
+		    chomp($lines[$i]);
+		    if ($lines[$i] =~ /^ERROR:/)
+		    {
+				if ($lines[$i] =~ /exited with value/) 
+				{
+				    chomp($lines[$i+1]);
+				    if($lines[$i+1] ne ''){ $err_str .= $lines[$i] . ': ' . $lines[$i+1]; }
+				    else { $err_str .= $lines[$i] }
+				}
+				else { $err_str .= $lines[$i]; }
+				$err_str .= '\n';
+		    }
+		    elsif ($lines[$i] eq 'DONE')
+		    {
+				$done = 1;
+				last;
+		    }
 		}
-		else { $err_str .= $lines[$i]; }
-		$err_str .= '\n';
-	    }
-	    elsif ($lines[$i] eq 'DONE')
-	    {
-		$done = 1;
-		last;
-	    }
-	}
-	if ($done)
-	{
-	    if ($err_str) { return $err_str; }
-	    else { return 'DONE'; }
-	}
-	else { return ""; }
+		if ($done)
+		{
+		    if ($err_str) { return $err_str; }
+		    else { return 'DONE'; }
+		}
+		else { return ""; }
     }
     else { return ""; }
 }
+

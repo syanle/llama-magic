@@ -1,4 +1,4 @@
-#!C:/Perl/bin/perl 
+#!/usr/local/ActivePerl-5.24/bin/perl
 
 #runs the scripts sent in by command line arguments for (CGI web script) llama_magic.pl
 #options are:
@@ -180,6 +180,7 @@ elsif($function eq 'search_and_map_scripts')
     my $use_primers = $ARGV[9];
     my $add_tails = $ARGV[10];
     my $use_constants = $ARGV[11];
+    my $new_primers = $ARGV[12];
     
     #create status txt file
     open(OUT, ">$results_dir/status.txt") or die "Failed to create status file: $results_dir/status.txt";
@@ -208,14 +209,14 @@ XMLTEXT
 	    print XML_OUT qq(\n\t<note type="input" label="protein, taxon">llama</note>);
 	}
 	
-        #get list of mgf files and add a line in input.xml for each one
-        my @file_names = <$results_dir/mgf/*.mgf>; 
-        foreach my $cur_file (@file_names)
+    #get list of mgf files and add a line in input.xml for each one
+    my @file_names = <$results_dir/mgf/*.mgf>; 
+    foreach my $cur_file (@file_names)
 	{
-            print XML_OUT qq(\n\t<note type="input" label="spectrum, path">$cur_file</note>);
-        }
+        print XML_OUT qq(\n\t<note type="input" label="spectrum, path">$cur_file</note>);
+    }
         
-        print XML_OUT <<XMLTEXT;
+    print XML_OUT <<XMLTEXT;
 	<note type="input" label="output, path">$results_dir/tandem/results/output.xml</note>
 	<note type="input" label="output, results">valid</note>
 </bioml>
@@ -224,8 +225,8 @@ XMLTEXT
         close(XML_OUT);
     
         #run xtandem with uploaded mgf files
-        print OUT qq!Calling: "../tandem.exe" "$results_dir/tandem/input.xml"\n!;
-        my $cmd_out = `"../tandem.exe" "$results_dir/tandem/input.xml" 2>&1`;
+        print OUT qq!Calling: "../tandem" "$results_dir/tandem/input.xml"\n!;
+        my $cmd_out = `"../tandem" "$results_dir/tandem/input.xml" 2>&1`;
         if ( $? == -1 )
         {
             print OUT "ERROR: command failed (tandem.exe): $!\n";
@@ -260,8 +261,8 @@ XMLTEXT
                 #run map_peptides_to_proteins - output is candidate list html file
                 
 		#need to change this, need to add input of whether using primers / make changes in map_peptides_to_proteins.pl...
-                print OUT qq!Calling: "../map_peptides_to_proteins.pl" "$results_dir/tandem/results/$pep_file" "$taxon_dir/protein/longest_nr.fasta" "$cgi_results_dir/tandem/results/output.xml" "$taxon_dir/protein/protein_peptides.fasta" "$show_score" "$use_primers" "$add_tails"\n!;
-                my $cmd_out = `"perl" "../map_peptides_to_proteins.pl" "$results_dir/tandem/results/$pep_file" "$taxon_dir/protein/longest_nr.fasta" "$cgi_results_dir/tandem/results/output.xml" "$taxon_dir/protein/protein_peptides.fasta" "$show_score" "$use_primers" "$add_tails" 2>&1`;
+                print OUT qq!Calling: "../map_peptides_to_proteins.pl" "$results_dir/tandem/results/$pep_file" "$taxon_dir/protein/longest_nr.fasta" "$cgi_results_dir/tandem/results/output.xml" "$taxon_dir/protein/protein_peptides.fasta" "$show_score" "$use_primers" "$add_tails" "$new_primers" \n!;
+                my $cmd_out = `"perl" "../map_peptides_to_proteins.pl" "$results_dir/tandem/results/$pep_file" "$taxon_dir/protein/longest_nr.fasta" "$cgi_results_dir/tandem/results/output.xml" "$taxon_dir/protein/protein_peptides.fasta" "$show_score" "$use_primers" "$add_tails" "$new_primers" 2>&1`;
                 if ( $? == -1 )
                 {
                     print OUT "ERROR: command failed (map_peptides_to_proteins.pl): $!\n";

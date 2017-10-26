@@ -1,1 +1,1 @@
-INSTALL_DIR=C:\Shared Projects\llama-magic
+INSTALL_DIR=/Users/sarahkeegan/fenyolab/code/NCDIR/Llama/
